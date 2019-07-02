@@ -1,73 +1,69 @@
 const express = require('express')
-const NotesService = require('./notes-service')
+const FoldersService = require('./folders-service')
 const xss = require('xss')
-const notesRouter = express.Router()
+const foldersRouter = express.Router()
 const jsonParser = express.json()
 const path = require('path')
 
-const serializeNote = note => ({
-    id: note.id,
-    name: xss(note.name),
-    content: xss(note.content),
-    folder_id: note.folder_id,
-    modified: note.modified
+const serializeFolder = folder => ({
+    id: folder.id,
+    name: xss(folder.name),
 })
 
-notesRouter
+foldersRouter
     .route('/')
     .get((req, res, next) => {
         const connect = req.app.get('db')
-        NotesService.getAllNotes(connect)
+        FoldersService.getAllFolders(connect)
             .then(notes => {
-                res.json(notes.map(serializeNote))
+                res.json(notes.map(serializeFolder))
             })
             .catch(next)
     })
     .post(jsonParser, (req, res, next) => {
         const connect = req.app.get('db')
-        const {name, content, folder_id} = req.body
-        const newNote = {name, content}
+        const {name} = req.body
+        const newFolder = {name}
 
-        for(const [key, value] of Object.entries(newNote)) {
+        for(const [key, value] of Object.entries(newFolder)) {
             if(value == null) {
                 return res.status(400).json({
                     error: {mesage: `Missing '${key}' in request body`}
                 })
             }
         }
-        newNote.folder_id = folder_id
 
-        NotesService.insertNote(connect, newNote)
-            .then(note => {
+        FoldersService.insertFolder(connect, newFolder)
+            .then(folder => {
                 res
                     .status(201)
-                    .location(path.posix.join(req.originalUrl, `/${note.id}`))
-                    .json(serializeNote(note))
+                    .location(path.posix.join(req.originalUrl, `/${folder.id}`))
+                    .json(serializeFolder(folder))
             })
             .catch(next)
     })
-notesRouter
-    .route('/:note_id')
+foldersRouter
+    .route('/:folder_id')
     .all((req, res, next) => {
         const connect = req.app.get('db')
-        NotesService.getById(connect, req.params.note_id)
-            .then(note => {
-            if(!note) {
+        FoldersService.getById(connect, req.params.folder_id)
+            .then(folder => {
+            if(!folder) {
                 return res.status(404).json({
-                    error: {message: `Note does not exist`}
+                    error: {message: `Folder does not exist`}
                 })
             }
-            res.note = note
+            res.folder = folder
             next()
         })
         .catch(next)
     })
     .get((req, res, next) => {
-        res.json(serializeNote(res.note))
+        res.json(serializeFolder(res.folder))
     })
     .delete((req, res, next) => {
         const connect = req.app.get('db')
-        NotesService.deleteNote(connect, req.params.note_id)
+        FoldersService.deleteFolder(connect, req.params.folder_id)
             .then(() => {
                 res.status(204).end()
             })
@@ -75,10 +71,10 @@ notesRouter
     })
     .patch(jsonParser, (req, res, next) => {
         const connect = req.app.get('db')
-        const{name, content} = req.body
-        const noteToUpdate = {name, content}
+        const{name} = req.body
+        const folderToUpdate = {name}
 
-        const numberOfValues = Object.values(noteToUpdate).filter(Boolean).length
+        const numberOfValues = Object.values(folderToUpdate).filter(Boolean).length
         if(numberOfValues === 0) {
             return res.status(400).json({
                 error: {
@@ -86,15 +82,14 @@ notesRouter
                 }
             })
         }
-        noteToUpdate.modified = new Date()
-        NotesService.updateNote(
+        FoldersService.updateFolder(
             connect, 
-            req.params.note_id,
-            noteToUpdate
+            req.params.folder_id,
+            folderToUpdate
         )
         .then(numRowsAffected => {
             res.status(204).end()
         })
         .catch(next)
     })
-module.exports = notesRouter
+module.exports = foldersRouter
